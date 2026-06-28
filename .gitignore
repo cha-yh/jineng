@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+
+# Runtime state created by Jineng lives under ~/.jineng,
+# but keep local logs and temporary files out of source control too.
+*.log
+tmp/

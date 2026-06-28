@@ -1,0 +1,29 @@
+{
+  "entries": [
+    {
+      "id": "web-app",
+      "label": "Web App",
+      "cwd": "~/projects/web-app",
+      "command": "npm run dev",
+      "options": {
+        "host": {
+          "values": ["localhost", "0.0.0.0"],
+          "default": "localhost"
+        },
+        "port": {
+          "values": ["3000"],
+          "default": "3000",
+          "allowCustom": true
+        }
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "login",
+      "label": "Login",
+      "command": "echo 'replace this command'",
+      "statusCommand": "exit 1"
+    }
+  ]
+}

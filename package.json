@@ -1,0 +1,32 @@
+{
+  "name": "jineng",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A terminal UI and daemon for managing local development servers.",
+  "license": "MIT",
+  "bin": {
+    "jineng": "./src/jineng"
+  },
+  "files": [
+    "dist/src",
+    "src/jineng"
+  ],
+  "scripts": {
+    "jineng": "src/jineng",
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc && mkdir -p dist/src && cp src/config.example.json dist/src/config.example.json",
+    "check": "tsc --noEmit",
+    "prepack": "npm run build",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "test:daemon": "npm run build && node --test --test-concurrency=1 dist/test/daemon.test.js",
+    "test:coverage": "npm run build && node --test --experimental-test-coverage dist/test/*.test.js",
+    "test:coverage:daemon": "npm run build && node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include=dist/src/daemon/*.js dist/test/daemon.test.js"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2"
+  }
+}
