@@ -1,20 +1,43 @@
 # Jineng
 
-Terminal UI and CLI tools for starting, stopping, inspecting, and tailing local development servers.
+Manage local development servers with a terminal UI, CLI, and background daemon.
 
-The name `jineng` is written to sound similar to the Korean word "진행" (`jinhaeng`), meaning
-"progress".
+Jineng helps you start, stop, inspect, and tail multiple local development processes from one
+terminal screen. The name is written to sound similar to the Korean word "진행" (`jinhaeng`),
+meaning "progress".
+
+## Features
+
+- Terminal UI for local server status, actions, details, and logs.
+- CLI commands for listing, starting, stopping, restarting, and configuring entries.
+- Background daemon that keeps managed processes alive independently of the UI.
+- Per-entry logs under `~/.jineng/logs`.
+- Configurable command options with `{placeholder}` substitution.
+- Git worktree instances with per-worktree ports.
+- Task entries for useful one-off or status-checked commands.
+- Automatic Node runtime selection from `nodeVersion`, `.nvmrc`, or `.node-version`.
+- Automatic install step when a package lockfile exists but `node_modules` is missing.
 
 ## Install
+
+From the repository root:
 
 ```sh
 pnpm install
 pnpm link --global
 ```
 
-## Usage
+You can also run it without linking:
 
-Create a user config, edit it for your projects, then run:
+```sh
+pnpm jineng
+```
+
+The executable builds `dist/` on first run when needed.
+
+## Quick Start
+
+Create a user config, edit it for your projects, then launch the TUI:
 
 ```sh
 jineng init
@@ -22,35 +45,70 @@ jineng config path
 jineng
 ```
 
+The packaged example config is intentionally generic. Replace the example `cwd` and `command`
+values before using Jineng day to day.
+
+## CLI
+
+```sh
+jineng                         # launch the TUI
+jineng init                    # create ~/.jineng/config.json
+jineng init --force            # overwrite the user config from the example
+jineng config path             # print the active config path
+jineng config help             # explain every supported config field
+jineng ls                      # list configured entries and statuses
+jineng start <id>              # start an entry
+jineng stop <id>               # stop an entry
+jineng restart <id>            # stop then start an entry
+jineng opts <id>               # show configurable options for an entry
+jineng opt <id> <key> <value>  # set an option value
+jineng ping                    # ping the daemon
+jineng daemon start            # start the daemon
+jineng daemon stop             # stop the daemon, managed children stay alive
+jineng daemon status           # show daemon status
+```
+
+Use a specific config for any command:
+
+```sh
+jineng --config ./config.json ls
+JINENG_CONFIG=./config.json jineng
+```
+
+## Config Resolution
+
 Jineng reads config in this order:
 
 1. `--config /path/to/config.json`
 2. `JINENG_CONFIG=/path/to/config.json`
 3. `~/.jineng/config.json`
-4. the packaged `config.example.json`
+4. packaged `src/config.example.json`
 
-CLI commands:
+If you change the active config while the daemon is running, restart the daemon:
+
+```sh
+jineng daemon stop
+```
+
+The next command starts it again with the new config.
+
+## AI Agent Setup
+
+AI coding agents can configure Jineng without project-specific prior knowledge. Ask the agent to run:
 
 ```sh
 jineng init
-jineng init --force
+jineng config help
 jineng config path
-jineng --config ./config.json ls
-jineng ls
-jineng start <id>
-jineng stop <id>
-jineng restart <id>
-jineng daemon status
 ```
 
-Runtime state, daemon pid/socket files, and logs are stored under `~/.jineng`.
+The agent can read `jineng config help` to understand every supported config field, then edit the
+file printed by `jineng config path`. Keep real project commands in the user config, not in
+`src/config.example.json`.
 
-The packaged example config is intentionally generic. Replace the example `cwd` and `command`
-values in your user config before using the TUI for day-to-day work. If you change the active config
-while the daemon is running, restart it with `jineng daemon stop`; the next command will start it
-again with the new config.
+## Server Entries
 
-## Config
+Use `entries[]` for long-running development servers.
 
 ```json
 {
@@ -59,8 +117,12 @@ again with the new config.
       "id": "web-app",
       "label": "Web App",
       "cwd": "~/projects/web-app",
-      "command": "npm run dev",
+      "command": "HOST={host} PORT={port} npm run dev",
       "options": {
+        "host": {
+          "values": ["localhost", "0.0.0.0"],
+          "default": "localhost"
+        },
         "port": {
           "values": ["3000"],
           "default": "3000",
@@ -72,10 +134,21 @@ again with the new config.
 }
 ```
 
+Entry fields:
+
+- `id`: stable command id used by the CLI and TUI.
+- `label`: optional display name.
+- `cwd`: working directory. `~/...` is expanded.
+- `command`: shell command to run. `{key}` placeholders are replaced from `options`.
+- `env`: optional environment variables.
+- `shell`: optional shell wrapper, for example `sh -lc`.
+- `nodeVersion`: optional Node version resolved from nvm or fnm.
+- `worktreePortScript`: optional command used to compute `PORT` for worktree instances.
+
 ## Task Entries
 
 Use top-level `tasks[]` for commands that are useful in the TUI but are not development servers.
-Task entries do not require `cwd`, and they are shown below the server list in the HUD.
+Task entries do not require `cwd`.
 
 ```json
 {
@@ -84,7 +157,8 @@ Task entries do not require `cwd`, and they are shown below the server list in t
       "id": "login",
       "label": "Login",
       "command": "echo 'replace this command'",
-      "statusCommand": "exit 1"
+      "statusCommand": "exit 1",
+      "statusTimeoutMs": 3000
     }
   ]
 }
@@ -92,6 +166,36 @@ Task entries do not require `cwd`, and they are shown below the server list in t
 
 When `statusCommand` exits successfully, the task is shown as active. A non-zero exit code is shown
 as inactive.
+
+## Runtime State
+
+Runtime files are stored under `~/.jineng`:
+
+- `config.json`: user config created by `jineng init`.
+- `daemon.pid`: daemon pid file.
+- `daemon.sock`: local daemon socket.
+- `daemon.log`: daemon stdout/stderr.
+- `logs/<id>.log`: per-entry process logs.
+- `instances.json`: running process metadata used for daemon reattach.
+- `options.json`: saved option values.
+- `worktrees.json`: saved worktree instances.
+
+Stopping the daemon does not stop managed child processes. The next daemon start reattaches to
+living processes when possible.
+
+## Development
+
+```sh
+pnpm install
+pnpm run build
+pnpm run check
+pnpm test
+pnpm run test:daemon
+pnpm run test:coverage
+pnpm run test:coverage:daemon
+```
+
+Build output is written to `dist/`. The package includes `dist/src` and `src/jineng`.
 
 ## License
 
