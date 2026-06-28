@@ -5,6 +5,7 @@ const {
   printResult,
   pad,
   fmtUptime,
+  configHelpText,
 } = require("./format");
 const { CliError } = require("./errors");
 
@@ -144,8 +145,13 @@ function createCommands(deps) {
       case "path":
         log(resolveConfigPath());
         break;
+      case "help":
+      case "-h":
+      case "--help":
+        log(configHelpText());
+        break;
       default:
-        throw new CliError("usage: jineng config path");
+        throw new CliError("usage: jineng config path|help");
     }
   }
 

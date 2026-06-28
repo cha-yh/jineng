@@ -10,6 +10,7 @@ const {
   pad,
   fmtUptime,
   helpText,
+  configHelpText,
   printHelp,
 } = require("../src/cli/format");
 const { run, defaultDeps } = require("../src/cli/index");
@@ -54,6 +55,12 @@ test("format helpers render stable CLI text", () => {
   assert.equal(pad("abcd", 3), "abcd");
   assert.equal(fmtUptime(3_661_000), "01:01:01");
   assert.match(helpText(), /jineng daemon start\|stop\|status/);
+  assert.match(helpText(), /jineng config help/);
+  assert.match(configHelpText(), /entries\[\]/);
+  assert.match(configHelpText(), /tasks\[\]/);
+  assert.match(configHelpText(), /worktreePortScript/);
+  assert.match(configHelpText(), /statusTimeoutMs/);
+  assert.match(configHelpText(), /allowCustom/);
 
   const logs = [];
   printHelp((line) => logs.push(line));
@@ -301,7 +308,9 @@ test("run routes every public verb and aliases", async () => {
       initConfig: ({ force }) => ({ ok: force, path: "/tmp/jineng/config.json" }),
     });
     await run(["config", "path"], deps);
-    await assert.rejects(run(["config"], deps), /usage: jineng config path/);
+    await run(["config", "help"], deps);
+    await run(["config", "--help"], deps);
+    await assert.rejects(run(["config"], deps), /usage: jineng config path\|help/);
     await run(["--config", "/tmp/custom.json", "ping"], deps);
     assert.equal(process.env.JINENG_CONFIG, "/tmp/custom.json");
     await run(["ping"], deps);
@@ -319,6 +328,7 @@ test("run routes every public verb and aliases", async () => {
   assert.ok(deps.logs.some((line) => /usage:/.test(line)));
   assert.ok(deps.logs.some((line) => /created \/tmp\/jineng\/config\.json/.test(stripAnsi(line))));
   assert.ok(deps.logs.some((line) => /\/tmp\/jineng\/config\.json/.test(stripAnsi(line))));
+  assert.ok(deps.logs.some((line) => /Jineng config help/.test(stripAnsi(line))));
   assert.ok(calls.some((message) => message.op === "ping"));
 });
 
