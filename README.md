@@ -30,13 +30,13 @@ less repetitive.
 Install the latest standalone binary for macOS arm64 or Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/ebf40fa/install.sh | bash
 ```
 
 Install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/main/install.sh | bash -s 0.1.2
+curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/ebf40fa/install.sh | bash -s 0.1.2
 ```
 
 The installer downloads the matching macOS arm64 or Linux binary from GitHub Releases, verifies the
