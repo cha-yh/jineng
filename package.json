@@ -16,6 +16,7 @@
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc && mkdir -p dist/src && cp src/config.example.json dist/src/config.example.json",
     "check": "tsc --noEmit",
     "prepack": "npm run build",
+    "release": "node scripts/release.mjs",
     "test": "npm run build && node --test dist/test/*.test.js",
     "test:daemon": "npm run build && node --test --test-concurrency=1 dist/test/daemon.test.js",
     "test:coverage": "npm run build && node --test --experimental-test-coverage dist/test/*.test.js",

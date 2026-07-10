@@ -6,6 +6,13 @@ Jineng helps you start, stop, inspect, and tail multiple local development proce
 terminal screen. The name is written to sound similar to the Korean word "진행" (`jinhaeng`),
 meaning "progress".
 
+It is built for developers who juggle many repositories, or who keep several Git worktrees active
+inside the same repository. Instead of remembering and retyping each dev-server command whenever a
+terminal session or TUI closes, Jineng runs managed commands through a background daemon and lets you
+control them from a single CLI or TUI. The daemon can keep child processes running independently of
+the UI and reattach to living processes on the next start, which makes long-running local workflows
+less repetitive.
+
 ## Features
 
 - Terminal UI for local server status, actions, details, and logs.
@@ -19,6 +26,9 @@ meaning "progress".
 - Automatic install step when a package lockfile exists but `node_modules` is missing.
 
 ## Install
+
+Download a versioned package from the GitHub Releases page, or install from the repository root
+when developing locally.
 
 From the repository root:
 
@@ -196,6 +206,34 @@ pnpm run test:coverage:daemon
 ```
 
 Build output is written to `dist/`. The package includes `dist/src` and `src/jineng`.
+
+## Release
+
+Releases are versioned with git tags such as `v0.2.0`. Pushing a `v*.*.*` tag runs the GitHub
+Release workflow, verifies the package, creates an npm-style `.tgz` archive, and attaches it to the
+GitHub Release.
+
+For maintainers:
+
+```sh
+pnpm release -- 0.2.0
+git push origin main v0.2.0
+```
+
+The release command updates `package.json`, runs checks and tests, creates a release commit, and
+creates an annotated tag. To create the GitHub Release directly from a local machine with the GitHub
+CLI, run:
+
+```sh
+pnpm release -- 0.2.0 --github
+```
+
+Useful variants:
+
+```sh
+pnpm release -- 0.2.0 --dry-run --no-git
+pnpm release -- 0.2.0 --skip-tests
+```
 
 ## License
 
