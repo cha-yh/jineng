@@ -45,21 +45,18 @@ if [ "$platform" = "darwin" ] && [ "$arch" = "x64" ]; then
 fi
 
 if [ "$VERSION" = "latest" ]; then
-  tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
-  if [ -z "$tag" ]; then
-    err "failed to resolve latest release"
-    exit 1
-  fi
+  tag="latest"
+  base_url="https://github.com/$REPO/releases/latest/download"
 else
   tag="$VERSION"
   case "$tag" in
     v*) ;;
     *) tag="v$tag" ;;
   esac
+  base_url="https://github.com/$REPO/releases/download/$tag"
 fi
 
 asset="jineng-${platform}-${arch}"
-base_url="https://github.com/$REPO/releases/download/$tag"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
