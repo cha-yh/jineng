@@ -80,6 +80,9 @@ async function run(argv = process.argv.slice(2), deps = defaultDeps()) {
     case "daemon":
       await commands.cmdDaemon(rest[0]);
       break;
+    case "__daemon":
+      require("../daemon").start();
+      break;
     case "init":
       await commands.cmdInit(rest);
       break;

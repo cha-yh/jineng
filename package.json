@@ -1,6 +1,6 @@
 {
   "name": "jineng",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": false,
   "description": "A terminal UI and daemon for managing local development servers.",
   "license": "MIT",
@@ -14,6 +14,7 @@
   "scripts": {
     "jineng": "src/jineng",
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc && mkdir -p dist/src && cp src/config.example.json dist/src/config.example.json",
+    "build:binary": "node scripts/build-binary.mjs",
     "check": "tsc --noEmit",
     "prepack": "npm run build",
     "release": "node scripts/release.mjs",
@@ -25,6 +26,7 @@
   "packageManager": "pnpm@10.0.0",
   "devDependencies": {
     "@types/node": "^26.0.1",
+    "postject": "1.0.0-alpha.6",
     "typescript": "^6.0.3"
   },
   "dependencies": {

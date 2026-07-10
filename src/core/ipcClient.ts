@@ -1,6 +1,7 @@
 // @ts-nocheck
 const net = require("net");
 const fs = require("fs");
+const path = require("path");
 const { spawn } = require("child_process");
 const {
   HOME_DIR,
@@ -52,10 +53,13 @@ async function spawnDaemon() {
     fs.unlinkSync(SOCKET);
   } catch {}
   const out = fs.openSync(DAEMON_LOG, "a");
-  const child = spawn(process.execPath, [DAEMON_ENTRY], {
+  const standalone = process.env.JINENG_STANDALONE === "1";
+  const args = standalone ? ["__daemon"] : [DAEMON_ENTRY];
+  const cwd = standalone ? path.dirname(process.execPath) : REPO_DIR;
+  const child = spawn(process.execPath, args, {
     detached: true,
     stdio: ["ignore", out, out],
-    cwd: REPO_DIR,
+    cwd,
   });
   child.unref();
   await waitFor(() => fs.existsSync(SOCKET) && daemonAlive(), 5000);

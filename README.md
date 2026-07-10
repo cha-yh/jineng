@@ -27,8 +27,23 @@ less repetitive.
 
 ## Install
 
-Download a versioned package from the GitHub Releases page, or install from the repository root
-when developing locally.
+Install the latest standalone binary:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/main/install.sh | bash
+```
+
+Install a specific version:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/main/install.sh | bash -s 0.1.2
+```
+
+The installer downloads the matching macOS or Linux binary from GitHub Releases, verifies the
+published SHA256 checksum, and installs it to `~/.local/bin/jineng`.
+
+You can also download the npm package archive from the GitHub Releases page, or install from the
+repository root when developing locally.
 
 From the repository root:
 
