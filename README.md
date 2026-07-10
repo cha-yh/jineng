@@ -27,6 +27,17 @@ less repetitive.
 
 ## Install
 
+If you already have Node.js and npm installed, use the npm package. This is the smaller install
+because it does not bundle a Node runtime:
+
+```sh
+npm install -g https://github.com/cha-yh/jineng/releases/download/v0.1.2/jineng-0.1.2.tgz
+```
+
+If you want to use Jineng without installing Node.js first, use the standalone binary. It bundles a
+Node runtime, so the download is larger, but the installed `jineng` command runs without a separate
+Node dependency.
+
 Install the latest standalone binary for macOS arm64 or Linux:
 
 ```sh
