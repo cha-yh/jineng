@@ -27,7 +27,7 @@ less repetitive.
 
 ## Install
 
-Install the latest standalone binary:
+Install the latest standalone binary for macOS arm64 or Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/main/install.sh | bash
@@ -39,7 +39,7 @@ Install a specific version:
 curl -fsSL https://raw.githubusercontent.com/cha-yh/jineng/main/install.sh | bash -s 0.1.2
 ```
 
-The installer downloads the matching macOS or Linux binary from GitHub Releases, verifies the
+The installer downloads the matching macOS arm64 or Linux binary from GitHub Releases, verifies the
 published SHA256 checksum, and installs it to `~/.local/bin/jineng`.
 
 You can also download the npm package archive from the GitHub Releases page, or install from the

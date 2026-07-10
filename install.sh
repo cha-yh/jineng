@@ -39,6 +39,11 @@ case "$arch" in
     ;;
 esac
 
+if [ "$platform" = "darwin" ] && [ "$arch" = "x64" ]; then
+  err "macOS x64 is not included in this installer yet"
+  exit 1
+fi
+
 if [ "$VERSION" = "latest" ]; then
   tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
   if [ -z "$tag" ]; then
