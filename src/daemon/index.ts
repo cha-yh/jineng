@@ -94,6 +94,12 @@ function handle(req, supervisor) {
         if (!e) return { ok: false, error: `unknown entry: ${req.id}` };
         return supervisor.start(e);
       }
+      case "statusCheck": {
+        const e = resolveInstance(cfg, supervisor, req.id);
+        if (!e) return { ok: false, error: `unknown entry: ${req.id}` };
+        if (!e.statusCommand) return { ok: false, error: `no statusCommand: ${req.id}` };
+        return { ok: true, check: supervisor.statusCheckFor(e) };
+      }
       case "stop":
         return supervisor.stop(req.id);
       case "worktreeDiscover": {

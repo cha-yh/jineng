@@ -52,6 +52,13 @@ function statusCheckCell(check) {
   return chalk.dim("? unknown");
 }
 
+function statusCheckDot(check) {
+  if (!check) return chalk.dim("○");
+  if (check.state === "active") return chalk.green("●");
+  if (check.state === "inactive") return chalk.red("○");
+  return chalk.dim("○");
+}
+
 // Convert entries[] into a line array with cursor highlight applied.
 // Returns: { lines, ranges } — ranges[i] = { entryIndex, startLine, endLine } describes the line range for the i-th visible entry.
 function buildEntryLines(visibleEntries) {
@@ -61,39 +68,41 @@ function buildEntryLines(visibleEntries) {
   const tasks = visibleEntries.filter((r) => isTaskEntry(r));
   const ordered = [...servers, ...tasks];
   const indexByEntry = new Map(ordered.map((entry, index) => [entry, index]));
-  servers.forEach((r) => {
-    const i = indexByEntry.get(r);
-    const isCursor = state.viewMode === "main" && i === state.cursor;
-    const arrow = isCursor ? chalk.yellow("▸") : " ";
-    const dot = compactStatusDot(r.status);
-    const idText = truncate(displayId(r), 27);
-    const id = isCursor ? chalk.yellow.bold(idText) : chalk.white(idText);
-    const idPadded = pad(id, 28);
-    const bText = compactBranch(r.branch);
-    const branch = bText ? chalk.cyan(bText) : chalk.dim("—");
-    const portText = formatPortsForEntry(r);
-    const port = padMin(portText ? chalk.magenta(portText) : chalk.dim("—"), 8);
-    const start = lines.length;
-    lines.push(` ${arrow} ${dot}  ${idPadded}${port}${branch}`);
-    ranges.push({ entryIndex: i, startLine: start, endLine: lines.length - 1 });
-  });
+  if (servers.length > 0) {
+    const sectionStart = lines.length;
+    lines.push(chalk.dim("  ENTRIES"));
+    servers.forEach((r, serverIndex) => {
+      const i = indexByEntry.get(r);
+      const isCursor = state.viewMode === "main" && i === state.cursor;
+      const arrow = isCursor ? chalk.yellow("▸") : " ";
+      const dot = compactStatusDot(r.status);
+      const idText = truncate(displayId(r), 27);
+      const id = isCursor ? chalk.yellow.bold(idText) : chalk.white(idText);
+      const idPadded = pad(id, 28);
+      const bText = compactBranch(r.branch);
+      const branch = bText ? chalk.cyan(bText) : chalk.dim("—");
+      const portText = formatPortsForEntry(r);
+      const port = padMin(portText ? chalk.magenta(portText) : chalk.dim("—"), 8);
+      const start = lines.length;
+      lines.push(` ${arrow} ${dot}  ${idPadded}${port}${branch}`);
+      ranges[i] = { entryIndex: i, startLine: serverIndex === 0 ? sectionStart : start, endLine: lines.length - 1 };
+    });
+  }
   if (tasks.length > 0) {
     if (lines.length > 0) lines.push("");
+    const sectionStart = lines.length;
     lines.push(chalk.dim("  TASKS"));
-    tasks.forEach((r) => {
+    tasks.forEach((r, taskIndex) => {
       const i = indexByEntry.get(r);
       const isCursor = state.viewMode === "main" && i === state.cursor;
       const arrow = isCursor ? chalk.yellow("▸") : " ";
       const idText = truncate(displayId(r), 27);
       const id = isCursor ? chalk.yellow.bold(idText) : chalk.white(idText);
       const idPadded = pad(id, 28);
-      const status = padMin(statusCheckCell(r.statusCheck), 13);
-      const runState = r.status === "running" || r.status === "installing"
-        ? chalk.cyan(r.status)
-        : chalk.dim("ready");
+      const dot = statusCheckDot(r.statusCheck);
       const start = lines.length;
-      lines.push(` ${arrow} ${status}${idPadded}${runState}`);
-      ranges[i] = { entryIndex: i, startLine: start, endLine: lines.length - 1 };
+      lines.push(` ${arrow} ${dot}  ${idPadded}`);
+      ranges[i] = { entryIndex: i, startLine: taskIndex === 0 ? sectionStart : start, endLine: lines.length - 1 };
     });
   }
   return { lines, ranges };
@@ -102,15 +111,6 @@ function buildEntryLines(visibleEntries) {
 function drawHudTop() {
   const top = [];
   top.push("");
-  top.push(chalk.bold(" 🖥  Jineng"));
-  top.push(SEP);
-  top.push(
-    "    " +
-      pad(chalk.bold(" "), 3) +
-      pad(chalk.bold("ID"), 28) +
-      pad(chalk.bold("PORT"), 8) +
-      chalk.bold("BRANCH"),
-  );
   return top;
 }
 
@@ -221,33 +221,41 @@ function detailEntryFromState() {
   return detailEntry(state);
 }
 
+function entryTitle(e, fallbackId = "?") {
+  const section = isTaskEntry(e) ? "TASKS" : "ENTRIES";
+  const name = e ? displayId(e) : fallbackId;
+  return chalk.dim(section) + chalk.dim(" / ") + chalk.yellow.bold(name || "?");
+}
+
 function drawDetailHeader(e) {
   const lines = [];
   lines.push("");
-  lines.push(chalk.bold(" 🖥  Jineng / ") + chalk.yellow.bold(displayId(e)));
+  lines.push(entryTitle(e));
   lines.push(SEP);
 
-  // Compact two-line summary: STATUS / PID / UPTIME on one line, ID / PORT on the next.
+  // Compact two-line summary for servers. Tasks use statusCommand as their status.
   const LABEL = (s) => chalk.dim(s);
   const COL1 = 28;
   const COL2 = 14;
-  const status = statusCell(e.status);
-  const pid = e.pid != null ? chalk.white(String(e.pid)) : chalk.dim("—");
-  const uptimeStr =
-    e.status === "running" || e.status === "paused" || e.status === "installing"
-      ? fmtUptime(Date.now() - e.startedAt)
-      : null;
-  const uptime = uptimeStr ? chalk.white(uptimeStr) : chalk.dim("—");
   const id = chalk.white(displayId(e));
-  const portText = formatPortsForEntry(e);
-  const port = portText ? chalk.magenta(portText) : chalk.dim("—");
 
-  lines.push(
-    `  ${LABEL(pad("STATUS", 8))}${pad(status, COL1)}${LABEL(pad("PID", 6))}${pad(pid, COL2)}${LABEL("UPTIME  ")}${uptime}`,
-  );
   if (isTaskEntry(e)) {
-    lines.push(`  ${LABEL(pad("ID", 8))}${pad(id, COL1)}${LABEL(pad("CHECK", 6))}${statusCheckCell(e.statusCheck)}`);
+    lines.push(`  ${LABEL(pad("STATUS", 8))}${statusCheckCell(e.statusCheck)}`);
+    lines.push(`  ${LABEL(pad("ID", 8))}${id}`);
   } else {
+    const status = statusCell(e.status);
+    const pid = e.pid != null ? chalk.white(String(e.pid)) : chalk.dim("—");
+    const uptimeStr =
+      e.status === "running" || e.status === "paused" || e.status === "installing"
+        ? fmtUptime(Date.now() - e.startedAt)
+        : null;
+    const uptime = uptimeStr ? chalk.white(uptimeStr) : chalk.dim("—");
+    const portText = formatPortsForEntry(e);
+    const port = portText ? chalk.magenta(portText) : chalk.dim("—");
+
+    lines.push(
+      `  ${LABEL(pad("STATUS", 8))}${pad(status, COL1)}${LABEL(pad("PID", 6))}${pad(pid, COL2)}${LABEL("UPTIME  ")}${uptime}`,
+    );
     lines.push(`  ${LABEL(pad("ID", 8))}${pad(id, COL1)}${LABEL(pad("PORT", 6))}${port}`);
   }
 
@@ -257,7 +265,7 @@ function drawDetailHeader(e) {
   rest.push(["CWD", e.cwd ? chalk.dim(e.cwd) : chalk.dim("—")]);
   if (e.worktree) rest.push(["WORKTREE", chalk.cyan(e.worktree.label)]);
   rest.push(["COMMAND", e.command ? chalk.white(e.command) : chalk.dim("—")]);
-  if (e.statusCommand) rest.push(["STATUS", chalk.white(e.statusCommand)]);
+  if (e.statusCommand) rest.push(["STATUS CMD", chalk.white(e.statusCommand)]);
   if (e.shell) rest.push(["SHELL", chalk.dim(e.shell)]);
   if (e.options && Object.keys(e.options).length > 0) {
     const optParts = Object.keys(e.options).map((k) => {
@@ -270,7 +278,6 @@ function drawDetailHeader(e) {
     const envParts = Object.entries(e.env).map(([k, v]) => chalk.green(`${k}=${v}`));
     rest.push(["ENV", envParts.join("  ")]);
   }
-  if (e.exitCode != null) rest.push(["EXIT CODE", chalk.red(String(e.exitCode))]);
   if (e.signal) rest.push(["SIGNAL", chalk.red(e.signal)]);
 
   for (const [label, value] of rest) {
@@ -294,6 +301,73 @@ function drawLogPreview() {
     }
   }
   lines.push("");
+  return lines;
+}
+
+function statusResultLinesFor(e) {
+  if (!e) return [];
+  const fullText = state.statusResultText ?? e.statusCheck?.fullText ?? e.statusCheck?.text ?? "";
+  const lines = String(fullText).split(/\r?\n/);
+  return lines.length === 1 && lines[0] === "" ? [] : lines;
+}
+
+function drawStatusResultView() {
+  const lines = [];
+  const e = detailEntryFromState();
+  const displayName = e ? displayId(e) : state.statusResultEntryId || "?";
+  const statusState = state.statusResultState || e?.statusCheck?.state || null;
+
+  lines.push("");
+  lines.push(
+    entryTitle(e, displayName) +
+      chalk.dim(" / ") +
+      chalk.bold("status command result") +
+      (statusState ? chalk.dim(`  (${statusState})`) : ""),
+  );
+  lines.push(SEP);
+
+  const cols = process.stdout.columns || 80;
+  if (e?.statusCommand) {
+    lines.push(chalk.dim(truncate(`  cmd: ${e.statusCommand}`, cols - 1)));
+  } else {
+    lines.push(chalk.dim("  cmd: —"));
+  }
+  lines.push(SEP);
+
+  const rows = process.stdout.rows || 30;
+  const reservedTop = lines.length;
+  const reservedBottom = 3;
+  const viewport = Math.max(5, rows - reservedTop - reservedBottom);
+  const lineWidth = Math.max(20, cols - 2);
+  const resultLines = statusResultLinesFor(e);
+
+  if (state.statusResultError) {
+    lines.push(chalk.red(`  ${state.statusResultError}`));
+  } else if (!e?.statusCommand) {
+    lines.push(chalk.dim("  (no statusCommand configured)"));
+  } else if (!e.statusCheck && state.statusResultText == null) {
+    lines.push(chalk.dim("  (not checked yet)"));
+  } else if (resultLines.length === 0) {
+    lines.push(chalk.dim("  (no output)"));
+  } else {
+    const total = resultLines.length;
+    if (state.statusResultScroll > total - 1) state.statusResultScroll = Math.max(0, total - 1);
+    const end = Math.max(0, total - state.statusResultScroll);
+    const start = Math.max(0, end - viewport);
+    for (const l of resultLines.slice(start, end)) {
+      lines.push("  " + truncate(stripCtrl(l), lineWidth));
+    }
+    while (lines.length < reservedTop + viewport) lines.push("");
+    lines.push(SEP);
+    const live = state.statusResultScroll === 0;
+    const pos = live
+      ? chalk.green("latest") + chalk.dim(`  (lines ${start + 1}-${end} of ${total})`)
+      : chalk.yellow(`↑ ${state.statusResultScroll} up`) +
+        chalk.dim(`  (lines ${start + 1}-${end} of ${total})  · r: jump to latest`);
+    lines.push("  " + pos);
+  }
+
+  lines.push(chalk.dim("  ↑↓: scroll  PgUp/PgDn: page  r: latest  ESC/q: back"));
   return lines;
 }
 
@@ -322,7 +396,7 @@ function drawDetailView() {
     const id = state.detailEntryId;
     return [
       "",
-      chalk.bold(" 🖥  Jineng / ") + chalk.red(id || "?"),
+      entryTitle(null, id || "?"),
       SEP,
       chalk.red("  entry not found"),
       SEP,
@@ -330,7 +404,7 @@ function drawDetailView() {
     ];
   }
   const head = drawDetailHeader(e);
-  const log = drawLogPreview();
+  const content = drawLogPreview();
   const menu = drawDetailActionsMenu(e);
   const footer = [];
   if (state.flash) {
@@ -338,7 +412,7 @@ function drawDetailView() {
       "  " + (state.flash.tone === "ok" ? chalk.green(state.flash.text) : chalk.red(state.flash.text)),
     );
   }
-  return [...head, ...log, ...menu, ...footer];
+  return [...head, ...content, ...menu, ...footer];
 }
 
 // detail view + sub-flow (worktreeSelect / optionSelect, etc.). Replaces the menu area with sub-flow lines.
@@ -472,14 +546,13 @@ function drawOptionSelect() {
 function drawLogView() {
   const lines = [];
   const id = state.logEntryId;
-  const entry = state.entries.find((e) => e.id === id);
+  const entry = visibleEntries(state).find((e) => e.id === id);
   const file = logPathFor(id);
 
   lines.push("");
   const displayName = entry ? displayId(entry) : id || "?";
   lines.push(
-    chalk.bold(" 🖥  Jineng / ") +
-      chalk.yellow.bold(displayName) +
+    entryTitle(entry, displayName) +
       chalk.dim(" / ") +
       chalk.bold("logs") +
       (entry ? chalk.dim(`  (${entry.status})`) : ""),
@@ -553,6 +626,8 @@ function render() {
   const rows = process.stdout.rows || 30;
   if (state.viewMode === "log") {
     all = drawLogView();
+  } else if (state.viewMode === "statusResult") {
+    all = drawStatusResultView();
   } else if (state.viewMode === "detail") {
     all = drawDetailView();
   } else if (state.viewMode === "main") {
@@ -589,6 +664,7 @@ module.exports = {
     drawOptionInput,
     drawOptionKeySelect,
     drawOptionSelect,
+    drawStatusResultView,
     drawWorktreeSelect,
     ensureCursorVisible,
     layoutMain,
@@ -597,6 +673,8 @@ module.exports = {
     render,
     statusCell,
     statusCheckCell,
+    statusCheckDot,
+    statusResultLinesFor,
   },
 };
 

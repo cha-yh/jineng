@@ -368,7 +368,7 @@ test("daemon index handles IPC operations without starting on require", (t) => {
 	      { id: "script-port", cwd: ".", command: "npm run dev", worktreePortScript: "echo 3333" },
 	    ],
 	    tasks: [
-	      { id: "login", command: "echo login" },
+	      { id: "login", command: "echo login", statusCommand: "echo status" },
 	    ],
 	  };
   fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
@@ -387,6 +387,7 @@ test("daemon index handles IPC operations without starting on require", (t) => {
     addWorktree: (id, entry, cwd, label) => ({ ok: true, id, cwd, label }),
     removeWorktree: (id) => ({ ok: true, id }),
     setOption: (id, key, value) => ({ ok: true, id, key, value }),
+    statusCheckFor: (entry) => ({ state: "active", ok: true, text: "{", fullText: "{\n  \"Account\": \"1\"\n}" }),
   };
 
   assert.equal(daemon.resolveInstance(cfg, supervisor, null), null);
@@ -419,6 +420,8 @@ test("daemon index handles IPC operations without starting on require", (t) => {
 	  assert.equal(listReply.tasks.length, 1);
 	  assert.equal(daemon.handle({ op: "start", id: "webview@feat" }, supervisor).worktree.portScript, ".scripts/find-port.sh");
 	  assert.equal(daemon.handle({ op: "start", id: "login" }, supervisor).id, "login");
+  assert.deepEqual(daemon.handle({ op: "statusCheck", id: "login" }, supervisor).check.fullText, "{\n  \"Account\": \"1\"\n}");
+  assert.equal(daemon.handle({ op: "statusCheck", id: "missing" }, supervisor).ok, false);
   assert.deepEqual(daemon.handle({ op: "stop", id: "webview" }, supervisor), { ok: true, id: "webview" });
   assert.equal(daemon.handle({ op: "worktreeDiscover", id: "webview" }, supervisor).ok, true);
   assert.equal(daemon.handle({ op: "worktreeAdd", id: "webview", cwd: "/x", label: "x" }, supervisor).ok, true);
@@ -501,7 +504,7 @@ test("daemon supervisor manages records, options, statuses, and worktree removal
 
   const oldExecSync = childProcess.execSync;
   childProcess.execSync = (cmd) => {
-    if (cmd === "status ok") return "arn:aws:iam::1:user/test\n";
+    if (cmd === "status ok") return "arn:aws:iam::1:user/test\nsecond line\n";
     throw Object.assign(new Error("not logged in"), { stderr: "expired\nmore" });
   };
   try {
@@ -509,11 +512,13 @@ test("daemon supervisor manages records, options, statuses, and worktree removal
       state: "active",
       ok: true,
       text: "arn:aws:iam::1:user/test",
+      fullText: "arn:aws:iam::1:user/test\nsecond line",
     });
     assert.deepEqual(supervisor.statusCheckFor({ id: "task", type: "task", command: "run", statusCommand: "status bad" }), {
       state: "inactive",
       ok: false,
       text: "expired",
+      fullText: "expired\nmore",
     });
     assert.equal(supervisor.statusCheckFor({ id: "task", type: "task", command: "run" }), null);
   } finally {

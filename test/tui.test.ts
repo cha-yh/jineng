@@ -242,7 +242,8 @@ describe("tui utils", () => {
     assert.equal(terminal.CURSOR_HOME, "\x1b[H");
     assert.ok(terminal.ENTER_ALT_SCREEN.includes("1049h"));
     assert.deepEqual(detailActions(sampleEntry()).map((a) => a.key), ["s", "R", "w"]);
-    assert.deepEqual(detailActions(sampleEntry({ type: "task" })).map((a) => a.key), ["s", "R"]);
+    assert.deepEqual(detailActions(sampleEntry({ type: "task" })).map((a) => a.key), ["s", "c"]);
+    assert.deepEqual(detailActions(sampleEntry({ type: "task" })).map((a) => a.label), ["run command", "Show status command result"]);
     assert.deepEqual(
       detailActions(sampleEntry({ status: "running", options: { host: {} }, worktree: { label: "wt" } })).map(
         (a) => a.key,
@@ -264,22 +265,65 @@ describe("tui renderer", () => {
 	        sampleEntry({ id: "app", status: "running", startedAt: Date.now() - 1000, ports: [3000] }),
 	      ],
 	      tasks: [
-	        sampleEntry({ id: "login", label: "Login", type: "task", statusCheck: { state: "active", ok: true, text: "ok" } }),
+	        sampleEntry({ id: "login", label: "Login", type: "task", statusCommand: "echo ok", statusCheck: { state: "active", ok: true, text: "ok", fullText: "ok\nsecond line" } }),
 	      ],
 	      viewMode: "main",
 	    });
     render();
-    assert.match(stdoutWrites.at(-1), /Jineng/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /Jineng/);
+    assert.match(stdoutWrites.at(-1), /ENTRIES/);
     assert.match(stdoutWrites.at(-1), /app/);
     assert.match(stdoutWrites.at(-1), /TASKS/);
     assert.match(stdoutWrites.at(-1), /login/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /active/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /ready/);
     assert.equal(_test.statusCheckCell({ state: "active" }), "● active");
     assert.equal(_test.statusCheckCell({ state: "inactive" }), "○ inactive");
     assert.equal(_test.statusCheckCell(null), "—");
+    assert.equal(_test.statusCheckDot({ state: "active" }), "●");
+    assert.equal(_test.statusCheckDot({ state: "inactive" }), "○");
+    assert.equal(_test.statusCheckDot(null), "○");
+    state.viewMode = "detail";
+    state.detailEntryId = "login";
+    render();
+    assert.match(stdoutWrites.at(-1), /TASKS \/ login/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /Jineng/);
+    assert.match(stdoutWrites.at(-1), /STATUS CMD/);
+    assert.match(stdoutWrites.at(-1), /STATUS\s+● active/);
+    assert.match(stdoutWrites.at(-1), /run command/);
+    assert.match(stdoutWrites.at(-1), /Show status command result/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /Status Command Result/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /EXIT CODE/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /CHECK/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /PID/);
+    assert.match(stdoutWrites.at(-1), /Logs/);
+    assert.match(stdoutWrites.at(-1), /\[→ open\]/);
+    state.viewMode = "statusResult";
+    state.statusResultEntryId = "login";
+    render();
+    assert.match(stdoutWrites.at(-1), /TASKS \/ login/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /Jineng/);
+    assert.match(stdoutWrites.at(-1), /status command result/);
+    assert.match(stdoutWrites.at(-1), /ok/);
+    assert.match(stdoutWrites.at(-1), /second line/);
+    assert.match(stdoutWrites.at(-1), /PgUp\/PgDn/);
+    state.viewMode = "log";
+    state.logEntryId = "login";
+    state.logLines = ["task line"];
+    state.logScroll = 0;
+    state.logError = null;
+    render();
+    assert.match(stdoutWrites.at(-1), /TASKS \/ login/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /Jineng/);
+    assert.match(stdoutWrites.at(-1), /login/);
+    assert.match(stdoutWrites.at(-1), /npm run dev/);
+    assert.match(stdoutWrites.at(-1), /task line/);
     state.viewMode = "detail";
     state.detailEntryId = "app";
     state.detailLogPreview = ["\x1b[31mready"];
     render();
+    assert.match(stdoutWrites.at(-1), /ENTRIES \/ app/);
+    assert.doesNotMatch(stdoutWrites.at(-1), /Jineng/);
     assert.match(stdoutWrites.at(-1), /Actions/);
     assert.match(stdoutWrites.at(-1), /ready/);
     state.viewMode = "optionSelect";
@@ -404,6 +448,7 @@ describe("tui controller", () => {
         }
         if (msg.op === "worktreeAdd") return { ok: true, instanceId: "app@wt", port: 4000 };
         if (msg.op === "worktreeRemove") return { ok: true };
+        if (msg.op === "statusCheck") return { ok: true, check: { state: "active", ok: true, text: "{", fullText: "{\n  \"Account\": \"1\"\n}" } };
         return { ok: true, pid: 123 };
       },
     });
@@ -447,8 +492,28 @@ describe("tui controller", () => {
 	    state.tasks = [sampleEntry({ id: "login", type: "task" })];
 	    state.cursor = 1;
 	    await test.actionMainEnter();
+	    assert.equal(state.viewMode, "detail");
+	    assert.equal(state.detailEntryId, "login");
+	    state.detailCursor = 0;
+	    await test.runDetailSelected();
 	    assert.equal(requests.some((r) => r.op === "start" && r.id === "login"), true);
-	    assert.equal(state.viewMode, "main");
+	    state.viewMode = "main";
+	    state.tasks = [sampleEntry({ id: "login", type: "task", statusCheck: { state: "active", ok: true, text: "ok", fullText: "one\ntwo\nthree" } })];
+	    state.cursor = 1;
+	    test.actionMainOpenDetail();
+	    assert.equal(state.viewMode, "detail");
+	    assert.equal(state.detailEntryId, "login");
+	    state.detailCursor = 1;
+	    await test.runDetailSelected();
+	    assert.equal(state.viewMode, "statusResult");
+	    assert.equal(state.statusResultEntryId, "login");
+	    assert.equal(state.statusResultText, "{\n  \"Account\": \"1\"\n}");
+	    test.handleStatusResultKey("\x1b[A");
+	    assert.equal(state.statusResultScroll, 1);
+	    test.handleStatusResultKey("r");
+	    assert.equal(state.statusResultScroll, 0);
+	    test.handleStatusResultKey("q");
+	    assert.equal(state.viewMode, "detail");
 	  });
 
   it("handles key routing, validation, flashes, timers, and quit", async () => {
@@ -478,6 +543,10 @@ describe("tui controller", () => {
     test.handleKey(Buffer.from("\x1b[<65;1;1M"));
     assert.equal(state.hudScrollOffset, 3);
     test.handleKey(Buffer.from("\r"));
+    assert.equal(state.viewMode, "detail");
+    state.viewMode = "main";
+    state.cursor = 0;
+    test.handleKey(Buffer.from("\x1b[C"));
     assert.equal(state.viewMode, "detail");
     test.handleDetailKey("o");
     assert.equal(state.viewMode, "optionSelect");

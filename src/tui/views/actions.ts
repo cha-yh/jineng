@@ -1,5 +1,12 @@
 // @ts-nocheck
 function detailActions(entry) {
+  if (entry.type === "task") {
+    return [
+      { key: "s", label: "run command" },
+      { key: "c", label: "Show status command result" },
+    ];
+  }
+
   const actions = [];
   if (entry.status === "running" || entry.status === "paused") {
     actions.push({ key: "x", label: "stop" });

@@ -1,6 +1,7 @@
 // @ts-nocheck
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 const state = require("../core/state");
 const { request } = require("../core/ipcClient");
 const { loadConfig } = require("../core/config");
@@ -54,6 +55,9 @@ async function refresh() {
         state.detailEntryId = null;
         state.detailCursor = 0;
       }
+      if (state.viewMode === "statusResult" && !detailEntry(state)) {
+        exitStatusResultView();
+      }
       // detail action list length may change — clamp the cursor
       const de = detailEntry(state);
       if (de) {
@@ -104,7 +108,7 @@ function loadLogLines() {
   } catch (e) {
     state.logLines = [];
     state.logError =
-      e.code === "ENOENT" ? "log file not created yet — start the server first" : e.message;
+      e.code === "ENOENT" ? "log file not created yet — run the command first" : e.message;
   }
 }
 
@@ -163,10 +167,12 @@ async function actionRestart() {
 async function actionMainEnter() {
   const e = selectedEntry(state);
   if (!e) return;
-  if (isTaskEntry(e)) {
-    await send("start", e.id);
-    return;
-  }
+  enterDetailView(e);
+}
+
+function actionMainOpenDetail() {
+  const e = selectedEntry(state);
+  if (!e) return;
   enterDetailView(e);
 }
 
@@ -195,6 +201,89 @@ function moveDetailCursor(delta) {
   render();
 }
 
+async function showStatusCommandResult() {
+  const e = detailEntry(state);
+  if (!e || !isTaskEntry(e)) return;
+  state.viewMode = "statusResult";
+  state.statusResultEntryId = e.id;
+  state.statusResultScroll = 0;
+  state.statusResultText = null;
+  state.statusResultError = "loading…";
+  state.statusResultState = null;
+  process.stdout.write(DISABLE_MOUSE);
+  render();
+  try {
+    const reply = await request({ op: "statusCheck", id: e.id });
+    if (state.viewMode !== "statusResult" || state.statusResultEntryId !== e.id) return;
+    if (reply.ok) {
+      const check = reply.check || null;
+      state.statusResultText = check?.fullText || check?.text || "";
+      state.statusResultState = check?.state || null;
+      state.statusResultError = null;
+    } else {
+      const check = runLocalStatusCommand(e);
+      state.statusResultText = check.fullText || check.text || "";
+      state.statusResultState = check.state;
+      state.statusResultError = check.localFallback ? null : reply.error;
+    }
+  } catch (err) {
+    if (state.viewMode !== "statusResult" || state.statusResultEntryId !== e.id) return;
+    const check = runLocalStatusCommand(e);
+    state.statusResultText = check.fullText || check.text || "";
+    state.statusResultState = check.state;
+    state.statusResultError = check.localFallback ? null : err.message;
+  }
+  render();
+}
+
+function runLocalStatusCommand(entry) {
+  if (!entry.statusCommand) {
+    return { state: null, ok: false, text: "", fullText: "", localFallback: false };
+  }
+  try {
+    const output = childProcess.execSync(entry.statusCommand, {
+      cwd: entry.cwd || process.cwd(),
+      env: { ...process.env, ...(entry.env || {}) },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: entry.statusTimeoutMs || 3000,
+      shell: true,
+    });
+    const fullText = String(output || "").trim();
+    const text = fullText.split(/\r?\n/)[0] || "";
+    return { state: "active", ok: true, text, fullText, localFallback: true };
+  } catch (err) {
+    const fullText = String(err.stderr || "").trim() || err.message || "inactive";
+    const text = fullText.split(/\r?\n/)[0] || "";
+    return { state: "inactive", ok: false, text, fullText, localFallback: true };
+  }
+}
+
+function exitStatusResultView() {
+  state.viewMode = state.detailEntryId ? "detail" : "main";
+  state.statusResultEntryId = null;
+  state.statusResultScroll = 0;
+  state.statusResultText = null;
+  state.statusResultError = null;
+  state.statusResultState = null;
+  process.stdout.write(ENABLE_MOUSE);
+  render();
+}
+
+function statusResultLines() {
+  const e = detailEntry(state);
+  if (!e) return [];
+  const fullText = state.statusResultText ?? e.statusCheck?.fullText ?? e.statusCheck?.text ?? "";
+  const lines = String(fullText).split(/\r?\n/);
+  return lines.length === 1 && lines[0] === "" ? [] : lines;
+}
+
+function scrollStatusResult(delta) {
+  const max = Math.max(0, statusResultLines().length - 1);
+  state.statusResultScroll = Math.max(0, Math.min(max, state.statusResultScroll + delta));
+  render();
+}
+
 const DETAIL_HANDLERS = {
   s: () => actionStart(),
   x: () => actionStop(),
@@ -202,6 +291,7 @@ const DETAIL_HANDLERS = {
   o: () => enterOptionFlow(),
   w: () => enterWorktreeSelect(),
   d: () => removeWorktreeInstance(),
+  c: () => showStatusCommandResult(),
 };
 
 function runDetailSelected() {
@@ -211,7 +301,7 @@ function runDetailSelected() {
   const sel = acts[state.detailCursor];
   if (!sel) return;
   const h = DETAIL_HANDLERS[sel.key];
-  if (h) h();
+  if (h) return h();
 }
 
 function moveCursor(delta) {
@@ -558,6 +648,18 @@ function handleLogKey(key) {
   }
 }
 
+function handleStatusResultKey(key) {
+  if (key === "q" || key === "\x1b" || key === "\x1b[D") return exitStatusResultView();
+  if (key === "\x1b[A" || key === "k") return scrollStatusResult(1);
+  if (key === "\x1b[B" || key === "j") return scrollStatusResult(-1);
+  if (key === "\x1b[5~") return scrollStatusResult(20);
+  if (key === "\x1b[6~") return scrollStatusResult(-20);
+  if (key === "r") {
+    state.statusResultScroll = 0;
+    render();
+  }
+}
+
 function handleDetailKey(key) {
   if (key === "q" || key === "\x1b" || key === "\x1b[D") return exitDetailView();
   if (key === "\x1b[A" || key === "k") return moveDetailCursor(-1);
@@ -572,6 +674,7 @@ function handleDetailKey(key) {
   if (key === "o") return enterOptionFlow();
   if (key === "w") return void enterWorktreeSelect();
   if (key === "d") return void removeWorktreeInstance();
+  if (key === "c") return showStatusCommandResult();
 }
 
 function handleKey(chunk) {
@@ -593,6 +696,10 @@ function handleKey(chunk) {
   if (state.viewMode === "log") {
     if (key === "\x03") return quit();
     return handleLogKey(key);
+  }
+  if (state.viewMode === "statusResult") {
+    if (key === "\x03") return quit();
+    return handleStatusResultKey(key);
   }
   if (state.viewMode === "optionSelect") {
     if (key === "\x03") return quit();
@@ -618,7 +725,8 @@ function handleKey(chunk) {
   if (key === "\x03" || key === "q") return quit();
   if (key === "\x1b[A" || key === "k") return moveCursor(-1);
   if (key === "\x1b[B" || key === "j") return moveCursor(1);
-  if (key === "\r" || key === "\n" || key === "\x1b[C") return void actionMainEnter();
+  if (key === "\r" || key === "\n") return void actionMainEnter();
+  if (key === "\x1b[C") return actionMainOpenDetail();
 }
 
 function quit() {
@@ -649,6 +757,7 @@ module.exports = {
   start,
   _test: {
     actionMainEnter,
+    actionMainOpenDetail,
     actionRestart,
     actionStart,
     actionStop,
@@ -668,6 +777,7 @@ module.exports = {
     exitDetailView,
     exitLogView,
     exitOptionFlow,
+    exitStatusResultView,
     exitWorktreeSelect,
     handleDetailKey,
     handleInputKey,
@@ -675,6 +785,7 @@ module.exports = {
     handleLogKey,
     handleOptionKey,
     handleOptionKeyListKey,
+    handleStatusResultKey,
     handleWorktreeKey,
     loadDetailLogPreview,
     loadLogLines,
@@ -688,7 +799,10 @@ module.exports = {
     runDetailSelected,
     scheduleRefresh,
     scrollLog,
+    scrollStatusResult,
     setFlash,
+    showStatusCommandResult,
+    statusResultLines,
   },
 };
 

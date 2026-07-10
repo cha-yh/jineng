@@ -250,6 +250,7 @@ class Supervisor {
         env: e.env || null,
         command: e.command || null,
         statusCommand: e.statusCommand || null,
+        statusTimeoutMs: e.statusTimeoutMs || null,
         shell: e.shell || null,
       };
     });
@@ -266,12 +267,13 @@ class Supervisor {
         timeout: entry.statusTimeoutMs || 3000,
         shell: true,
       });
-      const text = String(output || "").trim().split(/\r?\n/)[0] || "";
-      return { state: "active", ok: true, text };
+      const fullText = String(output || "").trim();
+      const text = fullText.split(/\r?\n/)[0] || "";
+      return { state: "active", ok: true, text, fullText };
     } catch (e) {
-      const stderr = String(e.stderr || "").trim().split(/\r?\n/)[0];
-      const message = stderr || e.message || "inactive";
-      return { state: "inactive", ok: false, text: message };
+      const fullText = String(e.stderr || "").trim() || e.message || "inactive";
+      const text = fullText.split(/\r?\n/)[0] || "";
+      return { state: "inactive", ok: false, text, fullText };
     }
   }
 
